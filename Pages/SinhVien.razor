@@ -1,0 +1,211 @@
+﻿@page "/sinhvien"
+@using Blazored.Toast.Services
+@using ClosedXML.Excel;
+@using MyProject.Data;
+@using System.Data.SqlClient;
+@using Microsoft.Data.SqlClient;
+@inject IJSRuntime JSRuntime;
+@using MyProject.Pages;
+
+<PageTitle>Quản lý Sinh Viên</PageTitle>
+
+<div class="container mt-4">
+    <h2 class="mb-4">Quản lý Sinh Viên</h2>
+
+    <!-- Form nhập thông tin -->
+    <div class="card p-3 mb-4">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label">Năm học</label>
+                <select class="form-select" @bind="nam_hoc">
+                    <option value="">-- Chọn năm học --</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="">Chưa nhập học</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Chuyên ngành</label>
+                <select class="form-select" @bind="chuyen_nganh">
+                    <option value="">-- Chọn chuyên ngành --</option>
+                    <option value="CNTT">CNTT</option>
+                    <option value="kinh_te">Kinh tế</option>
+                    <option value="ngoai_ngu">Ngoại ngữ</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label">Tên</label>
+                <input type="text" class="form-control" @bind="ten" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Quê quán</label>
+                <input type="text" class="form-control" @bind="que_quan" />
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label">Ngày sinh</label>
+                <input type="date" class="form-control" @bind="ngay_sinh" />
+            </div>
+        </div>
+
+        <!-- Các nút chức năng -->
+        <div class="d-flex gap-2">
+            <button class="btn btn-secondary" @onclick="HandleButtonClick">📂 Import Excel</button>
+            <InputFile id="fileInput" OnChange="@OnFileSelected" style="display: none;" />
+            <button class="btn btn-success" @onclick="Create">➕ Thêm</button>
+            <button class="btn btn-primary" @onclick="Read">📄 Xem</button>
+            <button class="btn btn-warning" @onclick="Update">✏️ Sửa</button>
+            <button class="btn btn-danger" @onclick="Delete">🗑 Xóa</button>
+        </div>
+    </div>
+
+    <!-- Bảng dữ liệu -->
+    <div class="card p-3">
+        <h5>Dữ liệu sinh viên</h5>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>OID</th>
+                    <th>Năm học</th>
+                    <th>Chuyên ngành</th>
+                    <th>Tên</th>
+                    <th>Quê quán</th>
+                    <th>Ngày sinh</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (sinhVienList.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center">Chưa có dữ liệu</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var sv in sinhVienList)
+                    {
+                        <tr>
+                            <td>@sv.ten</td>
+                            <td>@sv.nam_hoc</td>
+                            <td>@sv.chuyen_nganh</td>
+                            <td>@sv.que_quan</td>
+                            <td>@sv.ngay_sinh</td>                            
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <ErrorCompont Message="@errorMessage" OnClose="@ClearError" />
+
+</div>
+
+
+@code {
+
+    // Chuỗi kết nối SQL Server
+    private string connectionString = "Server=DESKTOP-RTQ3QQO; Database=FootballDb; Trusted_Connection=True; MultipleActiveResultSets=true;";
+
+    // Biến lưu input
+    private string nam_hoc { get; set; }
+    private string chuyen_nganh { get; set; }
+    private string ten { get; set; }
+    private string que_quan { get; set; }
+    private DateTime ngay_sinh { get; set; } = DateTime.Now;
+    private bool showFilePicker = false;
+    // Danh sách sinh viên
+    private List<SinhVienData> sinhVienList = new();    
+
+
+    private string? errorMessage;
+
+    private void ShowError(string error)
+    {
+        errorMessage = "Đã có lỗi xảy ra";
+        errorMessage += $": {error}";
+    }
+
+    private void ClearError()
+    {
+        errorMessage = null;
+    }
+
+
+
+    private void Create()
+    {
+        // TODO: Thêm code Insert vào SQL Server
+    }
+
+    private void Read()
+    {
+        // TODO: Thêm code SELECT dữ liệu từ SQL Server
+    }
+
+    private void Update()
+    {
+        // TODO: Thêm code Update sinh viên
+    }
+
+    private void Delete()
+    {
+        // TODO: Thêm code Delete sinh viên
+    }
+    private void HandleButtonClick()
+    {
+        // Gọi hàm JavaScript để kích hoạt InputFile
+        JSRuntime.InvokeVoidAsync("triggerFilePicker");
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            sinhVienList.Clear(); // Xóa dữ liệu cũ
+
+            try
+            {
+                using var memoryStream = new MemoryStream();
+                await file.OpenReadStream().CopyToAsync(memoryStream); // Đọc file async
+                memoryStream.Position = 0; // Reset lại con trỏ stream
+
+                using var workbook = new XLWorkbook(memoryStream);
+                var worksheet = workbook.Worksheet(1); // Mở sheet đầu tiên
+
+                var firstRow = worksheet.FirstRowUsed();
+                var lastRow = worksheet.LastRowUsed();
+
+                // Lặp qua từng hàng, bỏ hàng đầu tiên (tiêu đề)
+                for (int row = firstRow.RowNumber() + 1; row <= lastRow.RowNumber(); row++)
+                {
+                    var currentRow = worksheet.Row(row);
+
+                    var sv = new SinhVienData
+                        {
+                            nam_hoc = currentRow.Cell(1).GetString(),
+                            chuyen_nganh = currentRow.Cell(2).GetString(),
+                            ten = currentRow.Cell(3).GetString(),
+                            ngay_sinh = currentRow.Cell(4).GetString(),
+                            que_quan = currentRow.Cell(5).GetString()
+                        };
+
+                    sinhVienList.Add(sv);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Có lỗi: {ex.Message}");
+                ShowError(ex.Message);
+            }
+        }
+    }
+    
+}
