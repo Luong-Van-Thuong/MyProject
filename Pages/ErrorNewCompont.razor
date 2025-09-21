@@ -1,0 +1,55 @@
+﻿@if (Messages.Any())
+{
+    <div class="toast-container top-0 end-0 p-3" style="z-index: 9999;">
+        @foreach (var message in Messages)
+        {
+            <div class="@(message.IsSuccess ? "toast show alert alert-success" : "toast show alert alert-danger")" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header">
+                    <strong class="me-auto">@(message.IsSuccess ? "Thành công" : "Lỗi")</strong>
+                    <button type="button" class="btn-close" @onclick="() => DismissMessage(message.Text)"></button>
+                </div>
+                <div class="toast-body">
+                    @message.Text
+                </div>
+            </div>
+        }
+    </div>
+}
+
+
+@code
+{
+    // Cấu trúc để lưu thông tin về mỗi thông báo
+    private class Message
+    {
+        public string Text { get; set; } = string.Empty;
+        public bool IsSuccess { get; set; }
+    }
+
+    private List<Message> Messages { get; set; } = new List<Message>();
+
+    public void ShowMessage(string message, bool isSuccess)
+    {
+        Messages.Add(new Message { Text = message, IsSuccess = isSuccess });
+        StateHasChanged();
+
+        var timer = new System.Timers.Timer(4000);
+        timer.Elapsed += (sender, e) =>
+        {
+            InvokeAsync(() => DismissMessage(message));
+            timer.Dispose();
+        };
+        timer.AutoReset = false;
+        timer.Start();
+    }
+
+    private void DismissMessage(string message)
+    {
+        var itemToRemove = Messages.FirstOrDefault(m => m.Text == message);
+        if (itemToRemove != null)
+        {
+            Messages.Remove(itemToRemove);
+            StateHasChanged();
+        }
+    }
+}

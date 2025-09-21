@@ -1,8 +1,10 @@
 using Avalonia;
-using MyProject.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using MyProject.Browser;
+using MyProject.Data;
+using Blazored.Toast;
 
 namespace MyProject
 {
@@ -13,7 +15,11 @@ namespace MyProject
         {
             HostApplicationBuilder appBuilder = Host.CreateApplicationBuilder(args);
             appBuilder.Services.AddBlazorWebView();
-            appBuilder.Services.AddSingleton<WeatherForecastService>();            
+            appBuilder.Services.AddSingleton<WeatherForecastService>();
+            appBuilder.Services.AddDbContext<AppDbContext>();
+            appBuilder.Services.AddBlazoredToast();
+
+
             using IHost myApp = appBuilder.Build();
 
             myApp.Start();

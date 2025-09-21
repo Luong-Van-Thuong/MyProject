@@ -1,0 +1,30 @@
+﻿@page "/testerror"
+@using MyProject.Shared
+<PageTitle>Trang chủ</PageTitle>
+
+<h1>Trang chủ</h1>
+
+<button class="btn btn-primary" @onclick="AddError">Thêm Lỗi</button>
+<button class="btn btn-primary" @onclick="AddSucss">Thêm Sucss</button>
+
+<ErrorNewCompont @ref="errorToastComponent" />
+
+<div class="toast show text-bg-success">Sucss</div>
+<div class="toast show text-bg-danger">Error</div>
+@code {
+    private ErrorNewCompont? errorToastComponent;
+
+    private int errorCount = 0;
+
+    private void AddError()
+    {
+        errorCount++;
+        errorToastComponent.ShowMessage("Đã lưu dữ liệu lỗi!", false);
+    }
+
+    private void AddSucss()
+    {
+        errorCount++;
+        errorToastComponent.ShowMessage("Đã lưu dữ liệu thành công!", true);
+    }
+}

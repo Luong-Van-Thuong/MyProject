@@ -1,17 +1,17 @@
-﻿@page "/sinhvien"
+﻿@page "/sinhvien1"
 @using Blazored.Toast.Services
 @using ClosedXML.Excel;
+@using MyProject.Browser
 @using MyProject.Data;
 @using System.Data.SqlClient;
 @using Microsoft.Data.SqlClient;
 @inject IJSRuntime JSRuntime;
 @using MyProject.Pages;
-
+@inject AppDbContext DbContext
 <PageTitle>Quản lý Sinh Viên</PageTitle>
 
-<div class="container mt-4">
+<div class="container mt-4 ">
     <h2 class="mb-4">Quản lý Sinh Viên</h2>
-
     <!-- Form nhập thông tin -->
     <div class="card p-3 mb-4">
         <div class="row mb-3">
@@ -59,10 +59,10 @@
         <div class="d-flex gap-2">
             <button class="btn btn-secondary" @onclick="HandleButtonClick">📂 Import Excel</button>
             <InputFile id="fileInput" OnChange="@OnFileSelected" style="display: none;" />
-            <button class="btn btn-success" @onclick="Create">➕ Thêm</button>
-            <button class="btn btn-primary" @onclick="Read">📄 Xem</button>
-            <button class="btn btn-warning" @onclick="Update">✏️ Sửa</button>
+            <button class="btn btn-success" @onclick="Create">➕ Thêm mới</button>            
+            <button class="btn btn-warning" @onclick="Update">✏️ Cập nhật</button>
             <button class="btn btn-danger" @onclick="Delete">🗑 Xóa</button>
+            <button class="btn btn-danger" @onclick="DrawChart">Thống kê</button>
         </div>
     </div>
 
@@ -72,12 +72,11 @@
         <table class="table table-striped">
             <thead>
                 <tr>
-                    <th>OID</th>
+                    <th>Họ và tên</th>
                     <th>Năm học</th>
                     <th>Chuyên ngành</th>
-                    <th>Tên</th>
-                    <th>Quê quán</th>
                     <th>Ngày sinh</th>
+                    <th>Quê quán</th>
                 </tr>
             </thead>
             <tbody>
@@ -91,7 +90,7 @@
                 {
                     @foreach (var sv in sinhVienList)
                     {
-                        <tr>
+                        <tr @onclick="() => SelectStudent(sv)">
                             <td>@sv.ten</td>
                             <td>@sv.nam_hoc</td>
                             <td>@sv.chuyen_nganh</td>
@@ -103,15 +102,21 @@
             </tbody>
         </table>
     </div>
-    <ErrorCompont Message="@errorMessage" OnClose="@ClearError" />
-
+    <ErrorNewCompont @ref="errorToastComponent" />
+    @if(isButtonDisabled)
+    {
+        <BarChart Data="@thongKeTheoNamHoc" />
+    }
+    
 </div>
 
 
 @code {
 
     // Chuỗi kết nối SQL Server
-    private string connectionString = "Server=DESKTOP-RTQ3QQO; Database=FootballDb; Trusted_Connection=True; MultipleActiveResultSets=true;";
+    private string connectionString =
+    "Server=DESKTOP-RTQ3QQO; Database=ThuongTest; Trusted_Connection=True; MultipleActiveResultSets=true; TrustServerCertificate=True;";
+    private ErrorNewCompont? errorToastComponent;
 
     // Biến lưu input
     private string nam_hoc { get; set; }
@@ -122,26 +127,37 @@
     private bool showFilePicker = false;
     // Danh sách sinh viên
     private List<SinhVienData> sinhVienList = new();    
+    private SinhVienData selectedStudent;
+    private List<NamHocThongKe> thongKeTheoNamHoc = new();
+    private List<string> errorMessage = new();
+    private bool _isFirstRender = true;
+    string colerError = "error-toast";
 
+    bool isButtonDisabled = false;
 
-    private string? errorMessage;
-
-    private void ShowError(string error)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        errorMessage = "Đã có lỗi xảy ra";
-        errorMessage += $": {error}";
+        if (_isFirstRender)
+        {
+            _isFirstRender = false;
+            await GetAllData();
+        }
     }
 
-    private void ClearError()
-    {
-        errorMessage = null;
-    }
 
-
-
-    private void Create()
+    private async Task Create()
     {
         // TODO: Thêm code Insert vào SQL Server
+        List<SinhVienData> svDataAdd = new();
+        SinhVienData sv = new();
+        sv.nam_hoc = nam_hoc;
+        sv.chuyen_nganh = chuyen_nganh;
+        sv.ten = ten;
+        sv.que_quan = que_quan;
+        sv.ngay_sinh = ngay_sinh.ToString();
+        svDataAdd.Add(sv);
+        await SaveToDatabaseAsync(svDataAdd);
+        await GetAllData();
     }
 
     private void Read()
@@ -149,14 +165,77 @@
         // TODO: Thêm code SELECT dữ liệu từ SQL Server
     }
 
-    private void Update()
+    private async Task Update()
     {
         // TODO: Thêm code Update sinh viên
+        var data = selectedStudent;
+        List<SinhVienData> svDataAdd = new();
+        SinhVienData sv = new();
+        sv.oid = data.oid;  
+        sv.nam_hoc = nam_hoc;
+        sv.chuyen_nganh = chuyen_nganh;
+        sv.ten = ten;
+        sv.que_quan = que_quan;        
+        sv.ngay_sinh = ngay_sinh.ToString();
+        svDataAdd.Add(sv);
+        await UpdateData(svDataAdd);
+
     }
 
-    private void Delete()
+    private async Task Delete()
     {
         // TODO: Thêm code Delete sinh viên
+        var oid = selectedStudent.oid;
+
+
+        var query = "DELETE FROM sinhvien WHERE oid = @oid";
+        try
+        {
+            var studentToRemove = sinhVienList.FirstOrDefault(sv => sv.oid == oid);
+            if (studentToRemove != null)
+            {
+                sinhVienList.Remove(studentToRemove);
+            }
+
+            var folderPath = @"C:\CODE\C_SHARP\Avalonia";
+            var filePath = Path.Combine(folderPath, "test.xlsx");
+            await UpdateExcelFileAsync(filePath);
+
+
+            using (var connection = new SqlConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                using (var cmd = new SqlCommand(query, connection))
+                {
+                    // Thêm tham số oid vào câu lệnh.
+                    cmd.Parameters.AddWithValue("@oid", oid);
+
+                    // ExecuteNonQueryAsync() được sử dụng cho các câu lệnh không trả về dữ liệu (như INSERT, UPDATE, DELETE).
+                    // Nó trả về số hàng bị ảnh hưởng bởi câu lệnh (trong trường hợp này là 1 nếu thành công).
+                    var rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                    // Có thể thêm logic kiểm tra rowsAffected ở đây.
+                    if (rowsAffected > 0)
+                    {
+                        Console.WriteLine($"Đã xóa thành công sinh viên với OID: {oid}.");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Không tìm thấy sinh viên với OID: {oid} để xóa.");
+                    }
+                }
+            }
+
+            errorToastComponent.ShowMessage("Đã xóa dữ liệu thành công! ", true);
+            await GetAllData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Đã xảy ra lỗi khi xóa sinh viên: {ex.Message}");
+            errorToastComponent.ShowMessage($"Đã xóa dữ liệu lỗi! \n {ex.Message}", false);
+        }
+
+
     }
     private void HandleButtonClick()
     {
@@ -169,8 +248,9 @@
         var file = e.File;
         if (file != null)
         {
-            sinhVienList.Clear(); // Xóa dữ liệu cũ
-
+            List<SinhVienData> sinhVienListAdd = new();
+            List<SinhVienData> sdAddDataBase = new();
+            // Import dữ liệu từ file Execl và hiển thị danh sách lên màn hình
             try
             {
                 using var memoryStream = new MemoryStream();
@@ -187,25 +267,266 @@
                 for (int row = firstRow.RowNumber() + 1; row <= lastRow.RowNumber(); row++)
                 {
                     var currentRow = worksheet.Row(row);
-
                     var sv = new SinhVienData
                         {
                             nam_hoc = currentRow.Cell(1).GetString(),
                             chuyen_nganh = currentRow.Cell(2).GetString(),
                             ten = currentRow.Cell(3).GetString(),
                             ngay_sinh = currentRow.Cell(4).GetString(),
-                            que_quan = currentRow.Cell(5).GetString()
+                            que_quan = currentRow.Cell(5).GetString(),
+                            oid = currentRow.Cell(6).GetString() == null ? "" : currentRow.Cell(6).GetString()
                         };
-
-                    sinhVienList.Add(sv);
+                    sinhVienListAdd.Add(sv);
                 }
+
+                if (sinhVienList == null && sinhVienList.Count==0)
+                {
+                    foreach(var dataOld in sinhVienList)
+                    {
+                        foreach(var dataNew in sinhVienListAdd)
+                        {
+                            if(!string.IsNullOrEmpty(dataOld.oid) && dataOld.oid != dataNew.oid)
+                            {
+                                sdAddDataBase.Add(dataNew);
+                            }
+                        }
+                    }                    
+                }
+                else
+                {
+                    sdAddDataBase = sinhVienListAdd;
+                }
+
+
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Có lỗi: {ex.Message}");
-                ShowError(ex.Message);
+                errorToastComponent.ShowMessage($"Đã lưu dữ liệu lỗi! \n {ex.Message}", false);
+
+            }
+
+            // Thêm dữ liệu vào database
+            try
+            {
+                await SaveToDatabaseAsync(sdAddDataBase);
+                colerError = "success-toast";
+                errorToastComponent.ShowMessage("Đã lưu dữ thành công!", true);
+
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine($"Lỗi khi lưu vào database: {ex.Message}");
+                errorToastComponent.ShowMessage($"Đã lưu dữ liệu lỗi! \n {ex.Message}", false);
+
             }
         }
     }
-    
+
+    // Import dữ liệu vào SQL Server
+    private async Task SaveToDatabaseAsync(List<SinhVienData> svList)
+    {
+        try
+        {
+
+            if (svList != null && svList.Count > 0)
+            {
+                using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+                foreach (var sv in svList)
+                {
+                    var query = @"INSERT INTO sinhvien (nam_hoc, chuyen_nganh, ten, que_quan, ngay_sinh, oid)
+                              VALUES (@nam_hoc, @chuyen_nganh, @ten, @que_quan, @ngay_sinh, @oid)";
+                    using var cmd = new SqlCommand(query, connection);
+                    var oid = Guid.NewGuid().ToString();
+                    sv.oid = oid;
+                    cmd.Parameters.AddWithValue("@oid", oid);
+                    cmd.Parameters.AddWithValue("@nam_hoc", sv.nam_hoc ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@chuyen_nganh", sv.chuyen_nganh ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ten", sv.ten ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@que_quan", sv.que_quan ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ngay_sinh", sv.ngay_sinh ?? (object)DBNull.Value);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+            else
+            {
+                return;
+            }
+
+            foreach (var item in svList)
+            {
+                sinhVienList.Add(item);
+            }
+            var folderPath = @"C:\CODE\C_SHARP\Avalonia";
+            var filePath = Path.Combine(folderPath, "test.xlsx");
+            await UpdateExcelFileAsync(filePath);
+            errorToastComponent.ShowMessage("Đã cập nhật lại dữ liệu trong file execl ok!", true);
+        }
+
+        catch(Exception ex)
+        {
+            Console.WriteLine($"Lỗi khi lưu vào database: {ex.Message}");
+            errorToastComponent.ShowMessage($"Đã lưu dữ liệu lỗi! \n {ex.Message}", false);
+            return;
+        };
+
+    } 
+
+    private async Task UpdateData(List<SinhVienData> svList)
+    {
+        try
+        {
+            if (svList != null && svList.Count > 0)
+            {
+                using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+                foreach (var sv in svList)
+                {
+                    var query = @"UPDATE sinhvien
+                                SET nam_hoc = @nam_hoc,
+                                    chuyen_nganh = @chuyen_nganh,
+                                    ten = @ten,
+                                    que_quan = @que_quan,
+                                    ngay_sinh = @ngay_sinh
+                                WHERE oid = @oid;";
+                    using var cmd = new SqlCommand(query, connection);
+                    string oid = sv.oid;
+                    cmd.Parameters.AddWithValue("@oid", oid);
+                    cmd.Parameters.AddWithValue("@nam_hoc", sv.nam_hoc ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@chuyen_nganh", sv.chuyen_nganh ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ten", sv.ten ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@que_quan", sv.que_quan ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ngay_sinh", sv.ngay_sinh ?? (object)DBNull.Value);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+            else
+            {
+                return;
+            }
+
+            foreach (var item in svList)
+            {
+                sinhVienList.Add(item);
+            }
+            var folderPath = @"C:\CODE\C_SHARP\Avalonia";
+            var filePath = Path.Combine(folderPath, "test.xlsx");
+            await UpdateExcelFileAsync(filePath);
+            errorToastComponent.ShowMessage($"Đã cập nhật dữ liệu thành công! ",true);
+            await GetAllData();
+        }
+        catch(Exception ex)
+        {
+            errorToastComponent.ShowMessage($"Đã lưu dữ liệu lỗi! \n {ex.Message}", false);
+        }
+    }
+
+    // Gán data cho các controll và và lấy được giá trị của hàng đã chọn
+    private void SelectStudent(SinhVienData student)
+    {
+        selectedStudent = student;
+        nam_hoc = selectedStudent.nam_hoc;
+        chuyen_nganh = selectedStudent.chuyen_nganh;
+        ten = selectedStudent.ten;
+        que_quan = selectedStudent.que_quan;
+        ngay_sinh = selectedStudent.ngay_sinh != null ? DateTime.Parse(selectedStudent.ngay_sinh) : DateTime.Now;
+
+    }
+
+    // Lấy toàn bộ dữ liệu từ sql 
+    private async Task GetAllData()
+    {
+        try
+        {
+            sinhVienList.Clear();
+
+            var query = "SELECT oid, nam_hoc, chuyen_nganh, ten, que_quan, ngay_sinh FROM sinhvien";
+
+            using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            using var cmd = new SqlCommand(query, connection);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var sv = new SinhVienData
+                {
+                    oid = reader.GetString(0),                              // oid
+                    nam_hoc = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    chuyen_nganh = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    ten = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                    que_quan = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                    ngay_sinh = reader.IsDBNull(5) ? "" : reader.GetString(5)
+                };
+
+                sinhVienList.Add(sv);
+            }
+            StateHasChanged();
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine($"Lỗi khi lấy dữ liệu: {ex.Message}");
+            errorToastComponent.ShowMessage($"Đã lưu dữ liệu lỗi! \n {ex.Message}", false);
+            return;
+        }
+
+    }
+
+    // Update lại file Excel với dữ liệu mới
+    private async Task UpdateExcelFileAsync(string filePath)
+    {
+        try
+        {
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("sheet1");
+
+            // Tạo header
+            worksheet.Cell(1, 1).Value = "Năm học";
+            worksheet.Cell(1, 2).Value = "Chuyên ngành";
+            worksheet.Cell(1, 3).Value = "Tên";
+            worksheet.Cell(1, 4).Value = "Ngày sinh";
+            worksheet.Cell(1, 5).Value = "Quê quán";
+            worksheet.Cell(1, 6).Value = "OID";
+
+            int row = 2; // bắt đầu ghi từ dòng 2
+            foreach (var sv in sinhVienList)
+            {
+                var namhoc = sv.nam_hoc;
+                worksheet.Cell(row, 1).SetValue(sv.nam_hoc ?? string.Empty);
+                worksheet.Cell(row, 2).SetValue(sv.chuyen_nganh ?? string.Empty);
+                worksheet.Cell(row, 3).SetValue(sv.ten ?? string.Empty);
+                worksheet.Cell(row, 4).SetValue(sv.ngay_sinh ?? string.Empty);
+                worksheet.Cell(row, 5).SetValue(sv.que_quan ?? string.Empty);
+                worksheet.Cell(row, 6).SetValue(sv.oid ?? string.Empty);
+                row++;
+            }
+
+            // Ghi đè lại file Excel
+            workbook.SaveAs(filePath);
+
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Lỗi khi ghi Excel: {ex.Message}");
+            errorToastComponent.ShowMessage($"Đã lưu dữ liệu lỗi! \n {ex.Message}", false);
+
+        }
+    }
+
+    private async Task DrawChart()
+    {
+        isButtonDisabled = true;        
+        thongKeTheoNamHoc = sinhVienList
+           .GroupBy(sv => sv.nam_hoc)
+           .Select(g => new NamHocThongKe
+           {
+               NamHoc = g.Key,
+               TuoiTrungBinh = g.Average(sv => DateTime.Now.Year - DateTime.Parse(sv.ngay_sinh).Year)
+           })
+           .OrderBy(t => int.Parse(t.NamHoc))
+           .ToList();
+    }
 }

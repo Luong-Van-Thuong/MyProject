@@ -1,23 +1,29 @@
-﻿
-@if (!string.IsNullOrEmpty(Message))
+﻿@if (Messages?.Any() == true)
 {
-    <div class="error-toast">
-        <span>@Message</span>
-        <button class="close-btn" @onclick="Close">×</button>
+    <div class="toast-container">
+        @foreach (var msg in Messages)
+        {
+            <div class="@CssClass">
+                <span>@msg</span>
+                <button class="close-btn" @onclick="() => Close(msg)">×</button>
+            </div>
+        }
     </div>
 }
 
 @code {
-    [Parameter] public string? Message { get; set; }
 
-    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public List<string> Messages { get; set; } = new();
 
-    private void Close()
+    [Parameter] public EventCallback<string> OnClose { get; set; }
+
+    [Parameter] public string CssClass { get; set; } = "error-toast";
+
+    private void Close(string msg)
     {
-        Message = null;
         if (OnClose.HasDelegate)
         {
-            OnClose.InvokeAsync();
+            OnClose.InvokeAsync(msg);
         }
     }
 }
