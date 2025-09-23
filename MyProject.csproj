@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk.Razor;Microsoft.NET.Sdk.Publish">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
@@ -10,10 +10,15 @@
     <RazorCompileOnBuild>true</RazorCompileOnBuild>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <LangVersion>latest</LangVersion>
+	<RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="wwwroot\favicon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="wwwroot\image\folder.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,7 +47,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />	  
   </ItemGroup>
 
 </Project>
